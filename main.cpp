@@ -19,9 +19,9 @@ int main(int argc, char * argv[])
 
     StereoRefiner * refiner = new StereoRefiner(img_folder, msk_folder, stereo_folder, result_folder, frame_name, stereo_fn);
     refiner->init_params();
-    refiner->read_in_results();
+    refiner->read_in_scanner_results();
     refiner->census_transform();
-    refiner->refine();
+    refiner->sgbm_refine();
     refiner->triangulate();
 
 
