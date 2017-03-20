@@ -1,9 +1,10 @@
 #include "refiner.h"
-#include "../../Qing/qing_matching_cost.h"
-#include "../../Qing/qing_disp.h"
-#include "../../Qing/qing_ply.h"
-#include "../../Qing/qing_file_reader.h"
-#include "../../Qing/qing_dir.h"
+#include "../Qing/qing_matching_cost.h"
+#include "../Qing/qing_disp.h"
+#include "../Qing/qing_ply.h"
+#include "../Qing/qing_file_reader.h"
+#include "../Qing/qing_dir.h"
+#include "../Qing/qing_image.h"
 
 void qing_get_min_max_disp(vector<float>& disp, float& min_val, float& max_val){
     min_val = 1000000.0f;
@@ -79,7 +80,7 @@ StereoRefiner::StereoRefiner(string frame_folder, string mask_folder,  string st
     m_raw_mask_l(Rect(m_crop_point_l, Size(m_crop_w, m_crop_h))).copyTo(m_mask_l);
     m_raw_mask_r(Rect(m_crop_point_r, Size(m_crop_w, m_crop_h))).copyTo(m_mask_r);
 
-# if 1
+# if 0
     imwrite(m_out_dir + "/crop_view_l.png", m_view_l);
     imwrite(m_out_dir + "/crop_view_r.png", m_view_r);
     imwrite(m_out_dir + "/crop_mask_l.png", m_mask_l);
@@ -88,8 +89,11 @@ StereoRefiner::StereoRefiner(string frame_folder, string mask_folder,  string st
 
     m_crop_size = m_crop_h * m_crop_w;
 # if 1
-    imwrite(m_out_dir + "/with_mask_crop_view_l.png", m_view_l);
-    imwrite(m_out_dir + "/with_mask_crop_view_r.png", m_view_r);
+	Mat temp_l, temp_r ;
+	m_view_l.copyTo(temp_l, m_mask_l);
+    imwrite(m_out_dir + "/with_mask_crop_view_l.png", temp_l);	
+	m_view_r.copyTo(temp_r, m_mask_r);
+    imwrite(m_out_dir + "/with_mask_crop_view_r.png", temp_r);
 # endif
 
     cvtColor(m_view_l, m_gray_l, CV_BGR2GRAY);
@@ -104,15 +108,53 @@ void StereoRefiner::init_params() {
     m_wnd = 10;
     m_patch_size = m_crop_h * 0.1;
     m_patch_overlap = m_wnd;
-    cout << "params: " << m_disp_step << '\t' << m_wnd << '\t' << m_patch_size << endl;
+    cout << "params: disp_step = " << m_disp_step << "\twnd = " << m_wnd << "\tpatch_size =" << m_patch_size << endl;
 }
 
 
-void StereoRefiner::read_in_scanner_results() {
-    string disp_name_l = m_scanner_dir + "/final_disp_l_0.txt";
-    string disp_name_r = m_scanner_dir + "/final_disp_r_0.txt";
-    float temp_min_disp, temp_max_disp;
+void StereoRefiner::read_in_scanner_results(const int level) {
+    string disp_name_l = m_scanner_dir + "/final_disp_l_" + qing_int_2_string(level) + ".txt";
+    string disp_name_r = m_scanner_dir + "/final_disp_r_" + qing_int_2_string(level) + ".txt";
+   
+	float temp_min_disp, temp_max_disp;
 
+	if(level != 0) {
+		string view_name_l = m_scanner_dir + "/crop_imgL_" + qing_int_2_string(level) + ".jpg";
+		string view_name_r = m_scanner_dir + "/crop_imgR_" + qing_int_2_string(level) + ".jpg";
+		string mask_name_l = m_scanner_dir + "/crop_mskL_" + qing_int_2_string(level) + ".jpg";
+		string mask_name_r = m_scanner_dir + "/crop_mskR_" + qing_int_2_string(level) + ".jpg";
+
+		m_view_l = imread(view_name_l, 1);
+		m_view_r = imread(view_name_r, 1);
+		m_mask_l = imread(mask_name_l, 0);   cv::threshold(m_mask_l, m_mask_l, 125, 255, THRESH_BINARY);
+		m_mask_r = imread(mask_name_r, 0);   cv::threshold(m_mask_r, m_mask_r, 125, 255, THRESH_BINARY);
+
+		m_crop_w = m_view_l.size().width;
+		m_crop_h = m_view_l.size().height;		
+	}
+	else
+	{
+/*		string view_name_l = m_scanner_dir + "/crop_imgL.jpg";
+		string view_name_r = m_scanner_dir + "/crop_imgR.jpg";
+		string mask_name_l = m_scanner_dir + "/crop_mskL.jpg";
+		string mask_name_r = m_scanner_dir + "/crop_mskR.jpg";
+
+		m_view_l = imread(view_name_l, 1);
+		m_view_r = imread(view_name_r, 1);
+		m_mask_l = imread(mask_name_l, 0);   cv::threshold(m_mask_l, m_mask_l, 125, 255, THRESH_BINARY);
+		m_mask_r = imread(mask_name_r, 0);   cv::threshold(m_mask_r, m_mask_r, 125, 255, THRESH_BINARY);
+
+		m_crop_w = m_view_l.size().width;
+		m_crop_h = m_view_l.size().height;		*/	
+
+		cout << m_view_l.size() << endl;
+		cout << m_view_r.size() << endl;
+		cout << m_mask_l.size() << endl;
+		cout << m_mask_r.size() << endl;
+	}
+
+	m_disp_l.clear();
+	m_disp_r.clear();
     qing_read_disp_txt(disp_name_l, m_crop_h, m_crop_w, m_disp_l);
     qing_read_disp_txt(disp_name_r, m_crop_h, m_crop_w, m_disp_r);
     qing_get_min_max_disp(m_disp_l, m_min_disp,  m_max_disp);
@@ -122,8 +164,8 @@ void StereoRefiner::read_in_scanner_results() {
 
     m_d_range = (m_max_disp - m_min_disp) / m_disp_step + 1;
 
-    // m_mcost_vol_l.resize(m_d_range * m_crop_size);  //not real
-    //  cout << "success in alloc matching cost volume..." << m_mcost_vol_l.size() << endl;
+	cout << "level " << level << ": " << m_view_l.size() << "\t" << m_min_disp << " ~ " << m_max_disp << endl;
+	cout << "read in scanner results in level " << level << " done..." << endl;
 }
 
 void StereoRefiner::census_transform() {
@@ -146,11 +188,11 @@ void StereoRefiner::census_transform() {
 
 }
 
-void StereoRefiner::sgbm_refine() {
+void StereoRefiner::sgbm_refine(const int level) {
     int cnt = 0, start_y, end_y;
     int vol_total_size = m_crop_w * m_patch_size * m_d_range; cout << "cost vol size of a patch: " << vol_total_size << endl;
-    m_mcost_vol_l.resize(vol_total_size);
-    m_mcost_vol_l.resize(vol_total_size);
+//    m_mcost_vol_l.resize(vol_total_size);
+//    m_mcost_vol_l.resize(vol_total_size);
 
     StereoSGBM sgbm;
     sgbm.preFilterCap = 63;
@@ -160,7 +202,7 @@ void StereoRefiner::sgbm_refine() {
 
     sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
     sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
-    sgbm.minDisparity = 0;                           //0
+    sgbm.minDisparity = 0;										 //0
     sgbm.numberOfDisparities = 480;                              //total search disparity : 480 * 16
     sgbm.uniquenessRatio = 10;
     sgbm.speckleWindowSize = 100;
@@ -168,13 +210,13 @@ void StereoRefiner::sgbm_refine() {
     sgbm.disp12MaxDiff = 1;
     sgbm.fullDP = true;
 
-    Mat patch_l, patch_r, patch_disp;
-    Mat temp_refine_disp = Mat::zeros(m_crop_h, m_crop_w, CV_16SC1);
+	Mat patch_l, patch_r, patch_disp;
+    Mat temp_refine_disp = Mat::zeros(m_crop_h, m_crop_w, CV_16SC1), temp_median_disp;
     Mat temp_show_disp;
     m_refine_disp = Mat::zeros(m_crop_h, m_crop_w, CV_32FC1);
-    m_show_disp = Mat::zeros(m_crop_h, m_crop_w, CV_16S);
-
-    int h, w;
+    m_show_disp = Mat::zeros(m_crop_h, m_crop_w, CV_8U);
+	
+	int h, w;
 
     for(int y = 0; y < m_crop_h; ) {
 
@@ -197,52 +239,86 @@ void StereoRefiner::sgbm_refine() {
         m_view_l(Rect(0, start_y, w, h)).copyTo(patch_l);
         m_view_r(Rect(0, start_y, w, h)).copyTo(patch_r);
 
-        sgbm(patch_l, patch_r, patch_disp);
+	    sgbm(patch_l, patch_r, patch_disp);
 
         double minVal, maxVal;
         minMaxIdx(patch_disp, &minVal, &maxVal);
-        cout << minVal << "~" << maxVal << "\t";
+	    cout << minVal << "~" << maxVal << "\t";
 
         patch_disp.copyTo(temp_refine_disp(Rect(0,start_y,w,h)));
         cout << "sgbm done.." << endl;
     }
+	cv::medianBlur(temp_refine_disp, temp_median_disp, 5);
+
+	string filename  ;
+
     temp_refine_disp.convertTo(m_refine_disp, CV_32FC1, 1.0f/16);
     temp_refine_disp.convertTo(temp_show_disp, CV_8U, 255/(sgbm.numberOfDisparities*16.0));
     temp_show_disp.copyTo(m_show_disp, m_mask_l);
-    imwrite(m_out_dir+"/sgbm_disp.png", m_show_disp); cout << "saving " << m_out_dir + "/sgbm_disp.png" << endl;
+	filename = m_out_dir + "/sgbm_disp_" + qing_int_2_string(level) + ".png";
+    imwrite(filename, m_show_disp); cout << "saving " << filename << endl;
+
+	Mat erode_mask = qing_erode_image(m_mask_l, 20);
+	m_show_disp=Mat::zeros(m_show_disp.size(), m_show_disp.type());
+	temp_show_disp.copyTo(m_show_disp, erode_mask);
+	filename = m_out_dir + "/erode_sgbm_disp_" + qing_int_2_string(level) + ".png";
+	imwrite(filename, m_show_disp); cout << "saving " << filename << endl;
+
+	temp_median_disp.convertTo(m_median_refine_disp, CV_32FC1, 1.0f/16);
+	temp_median_disp.convertTo(temp_show_disp, CV_8U, 255/(sgbm.numberOfDisparities*16.0));
+	temp_show_disp.copyTo(m_median_show_disp, m_mask_l);
+	filename = m_out_dir + "/median_sgbm_disp_" + qing_int_2_string(level) + ".png";
+	imwrite(filename, m_median_show_disp); cout << "saving " << filename << endl;
+
+	m_median_show_disp=Mat::zeros(m_median_show_disp.size(), m_median_show_disp.type());
+	temp_show_disp.copyTo(m_median_show_disp, erode_mask);
+	filename = m_out_dir + "/erode_median_sgbm_disp_" + qing_int_2_string(level) + ".png";
+	imwrite(filename, m_median_show_disp); cout << "saving " << filename << endl;
+
 }
 
-void StereoRefiner::triangulate() {
-    cout << "\ntriangulate 3d points from disparity results..." ;
+void StereoRefiner::triangulate(const int level) {
+	cout << "\ntriangulate 3d points from disparity results..." ;
 
-    float * ptr_disp = (float *)m_refine_disp.ptr<float>(0);
-    unsigned char * ptr_msk  = (unsigned char *)m_mask_l.ptr<unsigned char>(0);
+	int erode_size = (!level)? 20:10;
+	Mat erode_mask = qing_erode_image(m_mask_l, erode_size);
 
-    double minVal, maxVal;
+	float * ptr_disp = (float *)m_refine_disp.ptr<float>(0);
+	//float * ptr_disp = &m_disp_l.front();
+	unsigned char * ptr_msk  = (unsigned char *)erode_mask.ptr<unsigned char>(0);
+	
+	double minVal, maxVal;
     minMaxIdx(m_refine_disp, &minVal, &maxVal);
-    cout << "max = " << maxVal << ", min = " << minVal << endl;
+	cout << "max_d = " << maxVal << ", min_d = " << minVal << '\t';
 
-    //preparing disparity
-    float offset = m_crop_point_l.x - m_crop_point_r.x;
+   int scale = 1 << level;
+   cout << "scale = " << scale << "\t";
+
+   //preparing disparity
+	float offset = (m_crop_point_l.x - m_crop_point_r.x) / (scale*1.f);
     cout << "offset = " << offset << endl;
-    for(int y = 0, index = 0; y < m_crop_h; ++y) {
+	for(int y = 0, index = 0; y < m_crop_h; ++y) {
         for(int x = 0; x < m_crop_w; ++x) {
             if( 255 == ptr_msk[index] && 0 < ptr_disp[index] )  ptr_disp[index] += offset;
             else  ptr_disp[index] = 0.f;
             index ++;
         }
-    }
+   }
 
-    vector<Vec3f> points; points.reserve(m_crop_size);
-    vector<Vec3f> colors; colors.reserve(m_crop_size);
+   vector<Vec3f> points; points.reserve(m_crop_size);
+   vector<Vec3f> colors; colors.reserve(m_crop_size);
 
-    unsigned char * ptr_bgr  = (unsigned char *)m_view_l.ptr<unsigned char>(0);
-    double * ptr_q_matrix = (double *)m_qmatrix.ptr<double>(0);
-
-    qing_disp_2_depth(points, colors, ptr_disp, ptr_msk, ptr_bgr, ptr_q_matrix, m_crop_point_l, m_crop_w, m_crop_h);
-    string savefn = m_out_dir + "/" + qing_int_2_format_string(m_stereo_id, 2, '0') + "_" +  m_frame_name + "_pointcloud_" + m_stereo_name + ".ply";
-    qing_write_point_color_ply(savefn, points, colors);
-    cout << "save " << savefn << " done. " << points.size() << " Points." << endl;
+   unsigned char * ptr_bgr  = (unsigned char *)m_view_l.ptr<unsigned char>(0);
+   double * ptr_q_matrix = new double[16];
+   memcpy(ptr_q_matrix,  (double *)m_qmatrix.ptr<double>(0), 16 * sizeof(double));
+   ptr_q_matrix[3]  /= scale; //0 + 3
+   ptr_q_matrix[7]  /= scale; //4 + 3
+   ptr_q_matrix[11] /= scale; //8 + 3
+     
+   qing_disp_2_depth(points, colors, ptr_disp, ptr_msk, ptr_bgr, ptr_q_matrix, m_crop_point_l, m_crop_w, m_crop_h);
+   string savefn = m_out_dir + "/" + qing_int_2_format_string(m_stereo_id, 2, '0') + "_" +  m_frame_name + "_pointcloud_" + m_stereo_name + "_" + qing_int_2_string(level) +  ".ply";
+   qing_write_point_color_ply(savefn, points, colors);
+   cout << "save " << savefn << " done. " << points.size() << " Points." << m_crop_w << '\t' << m_crop_h << endl;
 }
 
 
