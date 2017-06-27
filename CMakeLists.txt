@@ -21,6 +21,8 @@ use_cxx11()
 file(GLOB PROJECT_FILES
   "*.h"
   "*.cpp"
+  "qx_upsampling/*.cpp"
+  "qx_upsampling/*.h"
 )
 
 if(WITH_OPENCV)
