@@ -17,7 +17,7 @@ void qing_get_min_max_disp(vector<float>& disp, float& min_val, float& max_val){
     }
 }
 
-StereoRefiner::StereoRefiner(string frame_folder, string mask_folder,  string stereo_folder,  string scanner_folder,  string frame_name,  string stereo_fn)
+StereoRefiner::StereoRefiner(string frame_folder, string mask_folder,  string stereo_folder,  string scanner_folder, string frame_name,  string stereo_fn)
 {
     stereo_fn = stereo_folder + frame_name + "/" + stereo_fn;
     cout << stereo_fn << endl;

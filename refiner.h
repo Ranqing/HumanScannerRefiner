@@ -6,7 +6,7 @@
 class StereoRefiner
 {
 public:
-    StereoRefiner(string frame_folder, string mask_folder, string stereo_folder, string scanner_folder, string frame_name, string stereo_fn );
+    StereoRefiner(string frame_folder, string mask_folder, string stereo_folder, string scanner_folder, string frame_name, string stereo_fn);
 
     //   vector<unsigned char> m_view_l, m_view_r, m_mask_l, m_mask_r;
     //   vector<unsigned char> m_gray_l, m_gray_r, m_census_l, m_census_r;
